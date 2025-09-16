@@ -1,0 +1,22 @@
+# editors
+*.swp
+*~
+
+# build
+/build*/
+
+#ylim. readme
+README.rst
+
+# IDE-kansiot
+.vscode/
+.idea/
+
+# Väliaikaiset tiedostot
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.log
