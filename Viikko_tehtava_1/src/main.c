@@ -2,172 +2,121 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <inttypes.h>
-#include <zephyr/sys/util.h>
+#include <zephyr/drivers/uart.h>
+#include <string.h>
+#include <stdlib.h>
 
-// button configurations
-#define BUTTON_0 DT_ALIAS(sw0)
-
-// Led and button pin configurations
-static const struct gpio_dt_spec red   = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
-static const struct gpio_dt_spec green = GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
-static const struct gpio_dt_spec button_0 = GPIO_DT_SPEC_GET_OR(BUTTON_0, gpios, {0});
-static struct gpio_callback button_0_data;
-
-// led thread initialization
-#define STACKSIZE 1024
+// Thread initializations
+#define STACKSIZE 500
 #define PRIORITY 5
 
-void red_led_task(void *, void *, void*);
-void yellow_led_task(void *, void *, void*);
-void green_led_task(void *, void *, void*);
+// UART initialization
+#define UART_DEVICE_NODE DT_CHOSEN(zephyr_shell_uart)
+static const struct device *const uart_dev = DEVICE_DT_GET(UART_DEVICE_NODE);
 
-K_THREAD_DEFINE(red_thread,STACKSIZE,red_led_task,NULL,NULL,NULL,PRIORITY,0,0);
-K_THREAD_DEFINE(yellow_thread,STACKSIZE,yellow_led_task,NULL,NULL,NULL,PRIORITY,0,0);
-K_THREAD_DEFINE(green_thread,STACKSIZE,green_led_task,NULL,NULL,NULL,PRIORITY,0,0);
+// Create dispatcher FIFO buffer
+K_FIFO_DEFINE(dispatcher_fifo);
 
-// Global state variables
-volatile int led_state = 0;
-volatile int prev_led_state = 0;
+// FIFO dispatcher data type
+struct data_t {
+    void *fifo_reserved;
+    char msg[20];
+};
 
-// Function prototypes
-int init_leds(void);
+//UART alustus 
 
-// Button interrupt handler
-void button_0_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
-{
-    if (led_state != 4){
-        prev_led_state = led_state;
-        led_state = 4;
-        printk("Entering pause state. Paused from state: %d\n", prev_led_state);
-    } else {
-        led_state = prev_led_state;
-        printk("Exiting pause state. Resuming to state: %d\n", led_state);
+int init_uart(void) {
+    if (!device_is_ready(uart_dev)) {
+        return 1;
     }
+    return 0;
 }
 
-// Main program
+// ledi määrittelyt
+#define LED0_NODE DT_ALIAS(led0)
+#define LED1_NODE DT_ALIAS(led1)
+
+static const struct gpio_dt_spec led0 = GPIO_DT_SPEC_GET(LED0_NODE, gpios); // punainen
+static const struct gpio_dt_spec led1 = GPIO_DT_SPEC_GET(LED1_NODE, gpios); // vihreä
+
+static void leds_init(void) {
+    gpio_pin_configure_dt(&led0, GPIO_OUTPUT_INACTIVE);
+    gpio_pin_configure_dt(&led1, GPIO_OUTPUT_INACTIVE);
+}
+
+static void leds_off(void) {
+    gpio_pin_set_dt(&led0, 0);
+    gpio_pin_set_dt(&led1, 0);
+}
+
 int main(void)
 {
-    int ret;
-    ret = init_leds();
-    if(ret){
+    int ret = init_uart();
+    if (ret != 0) {
+        printk("UART initialization failed!\n");
         return ret;
     }
 
-    if (!gpio_is_ready_dt(&button_0)) {
-        printk("Error: button 0 is not ready\n");
-        return -1;
-    }
+    leds_init();
 
-    ret = gpio_pin_configure_dt(&button_0, GPIO_INPUT);
-    if (ret != 0) {
-        printk("Error: failed to configure button pin\n");
-        return -1;
-    }
-
-    ret = gpio_pin_interrupt_configure_dt(&button_0, GPIO_INT_EDGE_TO_ACTIVE);
-    if (ret != 0) {
-        printk("Error: failed to configure interrupt on pin\n");
-        return -1;
-    }
-
-    gpio_init_callback(&button_0_data, button_0_handler, BIT(button_0.pin));
-    gpio_add_callback(button_0.port, &button_0_data);
-    
-    printk("Program started. Button is ready.\n");
+    printk("Program started. Waiting for UART input...\n");
     return 0;
 }
 
-// Initialize leds
-int init_leds() {
-    int ret;
+static void uart_task(void *unused1, void *unused2, void *unused3)
+{
+    char rc = 0;
 
-    // Red LED
-    if (!gpio_is_ready_dt(&red)) {
-        printk("Error: Red LED not ready\n");
-        return -1;
-    }
-    ret = gpio_pin_configure_dt(&red, GPIO_OUTPUT_ACTIVE);
-    if (ret < 0) {
-        printk("Error: Red Led configure failed\n");
-        return ret;
-    }
-
-    // Green LED
-    if (!gpio_is_ready_dt(&green)) {
-        printk("Error: Green LED not ready\n");
-        return -1;
-    }
-    ret = gpio_pin_configure_dt(&green, GPIO_OUTPUT_ACTIVE);
-    if (ret < 0) {
-        printk("Error: Green Led configure failed\n");
-        return ret;
-    }
-
- 
-    gpio_pin_set_dt(&red,0);
-    gpio_pin_set_dt(&green,0);
-
-    printk("LEDs initialized successfully.\n");
-    return 0;
-}
-
-// Task for red led
-void red_led_task(void *, void *, void*) {
     while (true) {
-        if (led_state == 0) {
-            printk("Red ON\n");
-            gpio_pin_set_dt(&red, 1);
-            k_msleep(1000);
-            gpio_pin_set_dt(&red, 0);
-            printk("Red OFF\n");
+        if (uart_poll_in(uart_dev, &rc) == 0) {
+            printk("UART-task vastaanotti: %c\n", rc);  // DEBUG
 
-            k_msleep(10);
-            if (led_state == 0) {
-                led_state = 1;
+            if (rc == 'R' || rc == 'Y' || rc == 'G') {
+                struct data_t *buf = k_malloc(sizeof(struct data_t));
+                if (buf != NULL) {
+                    buf->fifo_reserved = NULL;
+                    buf->msg[0] = rc;
+                    buf->msg[1] = '\0';
+                    k_fifo_put(&dispatcher_fifo, buf);
+                }
             }
         }
-        k_msleep(100);
+        k_msleep(10);
     }
 }
 
-// Task for yellow led (red + green)
-void yellow_led_task(void *, void *, void*) {
+static void dispatcher_task(void *unused1, void *unused2, void *unused3)
+{
     while (true) {
-        if (led_state == 1) {
-            printk("Yellow ON\n");
-            gpio_pin_set_dt(&red, 1);
-            gpio_pin_set_dt(&green, 1);
-            k_msleep(1000);
-            gpio_pin_set_dt(&red, 0);
-            gpio_pin_set_dt(&green, 0);
-            printk("Yellow OFF\n");
+        struct data_t *rec_item = k_fifo_get(&dispatcher_fifo, K_FOREVER);
+        char c = rec_item->msg[0];
+        printk("Dispatcher sai: %c\n", c);  // DEBUG
+        k_free(rec_item);
 
-            k_msleep(10);
-            if (led_state == 1) { 
-                led_state = 2;
-            }
+        leds_off();
+
+        switch (c) {
+        case 'R':
+            printk("Sytytetään punainen LED\n");
+            gpio_pin_set_dt(&led0, 1);
+            break;
+        case 'G':
+            printk("Sytytetään vihreä LED\n");
+            gpio_pin_set_dt(&led1, 1);
+            break;
+        case 'Y':
+            printk("Sytytetään keltainen (punainen + vihreä)\n");
+            gpio_pin_set_dt(&led0, 1);
+            gpio_pin_set_dt(&led1, 1);
+            break;
+        default:
+            break;
         }
-        k_msleep(100);
+
+        k_msleep(1000); // LED palaa 1s
+        leds_off();
     }
 }
 
-// Task for green led
-void green_led_task(void *, void *, void*) {
-    while (true) {
-        if (led_state == 2) {
-            printk("Green ON\n");
-            gpio_pin_set_dt(&green, 1);
-            k_msleep(1000);
-            gpio_pin_set_dt(&green, 0);
-            printk("Green OFF\n");
-            
-            k_msleep(10);
-            if (led_state == 2) { 
-                led_state = 0;
-            }
-        }
-        k_msleep(100);
-    }
-}
+K_THREAD_DEFINE(dis_thread, STACKSIZE, dispatcher_task, NULL, NULL, NULL, PRIORITY, 0, 0);
+K_THREAD_DEFINE(uart_thread, STACKSIZE, uart_task, NULL, NULL, NULL, PRIORITY, 0, 0);
