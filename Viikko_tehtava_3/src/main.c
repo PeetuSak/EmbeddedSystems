@@ -3,6 +3,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/uart.h>
+#include <zephyr/timing/timing.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -27,7 +28,7 @@ struct data_t {
     char msg[20];
 };
 
-// Condition variables + mutexit valoille
+// Condition variables + mutexes
 K_MUTEX_DEFINE(red_mutex);
 K_MUTEX_DEFINE(green_mutex);
 K_MUTEX_DEFINE(yellow_mutex);
@@ -36,8 +37,20 @@ K_CONDVAR_DEFINE(red_cv);
 K_CONDVAR_DEFINE(green_cv);
 K_CONDVAR_DEFINE(yellow_cv);
 
-//uart alustus
+uint64_t red_time = 0;
+uint64_t green_time = 0;
+uint64_t yellow_time = 0;
 
+// LEDien alustus säie
+void init_leds(void *a, void *b, void *c)
+{
+    gpio_pin_configure_dt(&red, GPIO_OUTPUT_INACTIVE);
+    gpio_pin_configure_dt(&green, GPIO_OUTPUT_INACTIVE);
+    printk("LEDs initialized\n");
+    k_msleep(10);
+}
+
+//uart alustus
 int init_uart(void) {
     if (!device_is_ready(uart_dev)) {
         return 1;
@@ -55,7 +68,7 @@ static void uart_task(void *unused1, void *unused2, void *unused3)
 
     while (true) {
         if (uart_poll_in(uart_dev,&rc) == 0) {
-            printk("UART key: %c\n", rc);  // Debug
+            printk("UART key: %c\n", rc);  
 
             if (rc != '\r') {
                 uart_msg[uart_msg_cnt++] = rc;
@@ -103,14 +116,18 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
             // Odotetaan että edellinen LED ehtii sammua
             k_msleep(1100);
         }
+        uint64_t total_ns = red_time + green_time + yellow_time;
+        printk("Total task duration: %lld ns\n", total_ns);
     }
 }
 
 void red_task(void *a, void *b, void *c)
 {
-    gpio_pin_configure_dt(&red, GPIO_OUTPUT_INACTIVE);
-
-    while (1) {
+    while (true) {
+        
+        timing_start();
+        timing_t red_start_time = timing_counter_get();
+        
         k_mutex_lock(&red_mutex, K_FOREVER);
         k_condvar_wait(&red_cv, &red_mutex, K_FOREVER);
         k_mutex_unlock(&red_mutex);
@@ -120,14 +137,21 @@ void red_task(void *a, void *b, void *c)
         k_msleep(1000);
         gpio_pin_set_dt(&red, 0);
         printk("Red OFF\n");
+
+        timing_t red_end_time = timing_counter_get();
+        timing_stop();
+        red_time = timing_cycles_to_ns(timing_cycles_get(&red_start_time, &red_end_time));
+        printk("Red task duration: %lld ns\n", red_time);
     }
 }
 
 void green_task(void *a, void *b, void *c)
 {
-    gpio_pin_configure_dt(&green, GPIO_OUTPUT_INACTIVE);
 
-    while (1) {
+    while (true) {
+        timing_start();
+        timing_t green_start_time = timing_counter_get();
+
         k_mutex_lock(&green_mutex, K_FOREVER);
         k_condvar_wait(&green_cv, &green_mutex, K_FOREVER);
         k_mutex_unlock(&green_mutex);
@@ -137,16 +161,23 @@ void green_task(void *a, void *b, void *c)
         k_msleep(1000);
         gpio_pin_set_dt(&green, 0);
         printk("Green OFF\n");
+
+        timing_t green_end_time = timing_counter_get();
+        timing_stop();
+        green_time = timing_cycles_to_ns(timing_cycles_get(&green_start_time, &green_end_time));
+        printk("Green task duration: %lld ns\n", green_time);
     }
 }
 
 
 void yellow_task(void *a, void *b, void *c)
 {
-    gpio_pin_configure_dt(&red, GPIO_OUTPUT_INACTIVE);
-    gpio_pin_configure_dt(&green, GPIO_OUTPUT_INACTIVE);
 
-    while (1) {
+    while (true) {
+
+        timing_start();
+        timing_t yellow_start_time = timing_counter_get();
+
         k_mutex_lock(&yellow_mutex, K_FOREVER);
         k_condvar_wait(&yellow_cv, &yellow_mutex, K_FOREVER);
         k_mutex_unlock(&yellow_mutex);
@@ -158,11 +189,18 @@ void yellow_task(void *a, void *b, void *c)
         gpio_pin_set_dt(&red, 0);
         gpio_pin_set_dt(&green, 0);
         printk("Yellow OFF\n");
+
+        timing_t yellow_end_time = timing_counter_get();
+        timing_stop();
+        yellow_time = timing_cycles_to_ns(timing_cycles_get(&yellow_start_time, &yellow_end_time));
+        printk("Yellow task duration: %lld ns\n", yellow_time);
     }
 }
 
+
 int main(void)
 {
+    timing_init();
     if (init_uart() != 0) {
         printk("UART init failed!\n");
         return -1;
@@ -171,7 +209,9 @@ int main(void)
     return 0;
 }
 
+
 // Threads
+K_THREAD_DEFINE(init_leds_thread, STACKSIZE, init_leds, NULL, NULL, NULL, PRIORITY, 0, 0);
 K_THREAD_DEFINE(uart_thread, STACKSIZE, uart_task, NULL, NULL, NULL, PRIORITY, 0, 0);
 K_THREAD_DEFINE(dis_thread, STACKSIZE, dispatcher_task, NULL, NULL, NULL, PRIORITY, 0, 0);
 K_THREAD_DEFINE(red_thread, STACKSIZE, red_task, NULL, NULL, NULL, PRIORITY, 0, 0);
