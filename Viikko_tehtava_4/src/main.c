@@ -1,3 +1,5 @@
+// koodi 1p  tehtävään
+
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/device.h>
@@ -6,6 +8,29 @@
 #include <zephyr/timing/timing.h>
 #include <string.h>
 #include <stdlib.h>
+
+
+//parser
+#define TIME_LEN_ERROR      -1
+#define TIME_ARRAY_ERROR    -2
+#define TIME_VALUE_ERROR    -3
+
+// time format: HHMMSS
+int time_parse(char *time) {
+    if(time == NULL) return TIME_ARRAY_ERROR;
+    if(strlen(time) != 6) return TIME_LEN_ERROR;
+
+    int values[3];
+    values[2] = atoi(time+4); time[4]=0;
+    values[1] = atoi(time+2); time[2]=0;
+    values[0] = atoi(time);
+
+    if(values[0]<0 || values[0]>23 || values[1]<0 || values[1]>59 || values[2]<0 || values[2]>59)
+        return TIME_VALUE_ERROR;
+
+    return values[1]*60 + values[2]; 
+}
+
 
 // Thread initializations
 #define STACKSIZE 500
@@ -52,6 +77,15 @@ uint64_t red_time = 0;
 uint64_t green_time = 0;
 uint64_t yellow_time = 0;
 
+void timer_led_handler(struct k_timer *timer_id)
+{
+    printk("Timer handler kutsuttiin!\n");
+    k_mutex_lock(&red_mutex, K_FOREVER);
+    k_condvar_signal(&red_cv);
+    k_mutex_unlock(&red_mutex);
+}
+K_TIMER_DEFINE(timer_led, timer_led_handler, NULL);
+
 // LED initialization
 void init_leds(void *a, void *b, void *c)
 {
@@ -71,6 +105,7 @@ int init_uart(void) {
 
 static void uart_task(void *unused1, void *unused2, void *unused3)
 {
+    printk("UART-taski käynnistyi!\n");
     char rc=0;
     char uart_msg[20];
     memset(uart_msg,0,20);
@@ -101,6 +136,31 @@ static void dispatcher_task(void *unused1, void *unused2, void *unused3)
         char sequence[20];
         memcpy(sequence, rec_item->msg, sizeof(sequence));
         k_free(rec_item);
+
+ // parser
+        bool is_time_string = true;
+        for (int i = 0; i < strlen(sequence); i++) {
+            if (sequence[i] < '0' || sequence[i] > '9') {
+                is_time_string = false;
+                break;
+            }
+        }
+
+        if (is_time_string) {
+            int delay_sec = time_parse(sequence);
+
+            if (delay_sec >= 0) {
+                printk("Ajastin asetetaan %d sekunnin päähän\n", delay_sec);
+
+                // Käynnistä ajastin, joka sytyttää punaisen LEDin
+                k_timer_start(&timer_led, K_SECONDS(delay_sec), K_NO_WAIT);
+            } else {
+                printk("Virhe aikamerkkijonossa! (code: %d)\n", delay_sec);
+            }
+
+            continue; 
+        }
+    // parser loppuu
 
         for (int i=0; i<strlen(sequence); i++) {
             char c = sequence[i];
@@ -265,3 +325,4 @@ K_THREAD_DEFINE(red_thread, STACKSIZE, red_task, NULL, NULL, NULL, PRIORITY, 0, 
 K_THREAD_DEFINE(green_thread, STACKSIZE, green_task, NULL, NULL, NULL, PRIORITY, 0, 0);
 K_THREAD_DEFINE(yellow_thread, STACKSIZE, yellow_task, NULL, NULL, NULL, PRIORITY, 0, 0);
 K_THREAD_DEFINE(debug_thread, STACKSIZE, debug_task, NULL, NULL, NULL, PRIORITY+1, 0, 0); // debug taskille suurempi prioriteetti
+
