@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot generator="Robot 7.3.2 (Python 3.12.5 on win32)" generated="2025-10-29T19:07:34.792431" rpa="false" schemaversion="5">
+<suite id="s1" name="Teht5" source="C:\embdsys\Viikko_tehtava_4\teht5.robot">
+<test id="s1-t1" name="connect serial" line="18">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Connecting to ${board}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.859439" elapsed="0.000998"/>
+</kw>
+<kw name="Add Port" owner="SerialLibrary">
+<arg>${com}</arg>
+<arg>baudrate=${baud}</arg>
+<arg>encoding=${encoding}</arg>
+<doc>Adds new port with specified locator.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.860437" elapsed="0.007001"/>
+</kw>
+<kw name="Port Should Be Open" owner="SerialLibrary">
+<arg>${com}</arg>
+<doc>Fails if specified port is closed.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.868440" elapsed="0.000000"/>
+</kw>
+<kw name="Reset Input Buffer" owner="SerialLibrary">
+<doc>Clears input buffer.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.868440" elapsed="0.000000"/>
+</kw>
+<kw name="Reset Output Buffer" owner="SerialLibrary">
+<doc>Clears outout buffer.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.868440" elapsed="0.000000"/>
+</kw>
+<status status="PASS" start="2025-10-29T19:07:34.858441" elapsed="0.010997"/>
+</test>
+<test id="s1-t2" name="valid time string" line="25">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Testing valid time string ${valid_time}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.869438" elapsed="0.000000"/>
+</kw>
+<kw name="Write Data" owner="SerialLibrary">
+<arg>${valid_time}</arg>
+<arg>encoding=${encoding}</arg>
+<doc>Writes data into the port.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.870437" elapsed="0.000000"/>
+</kw>
+<kw name="Read Until" owner="SerialLibrary">
+<msg time="2025-10-29T19:07:34.877553" level="INFO">${resp} = 80X</msg>
+<var>${resp}</var>
+<arg>terminator=58</arg>
+<arg>encoding=${encoding}</arg>
+<doc>Read until a termination sequence is found, size exceeded or timeout.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.870437" elapsed="0.007116"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Received: ${resp}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.877553" elapsed="0.001001"/>
+</kw>
+<kw name="Should Be Equal As Strings" owner="BuiltIn">
+<arg>${resp}</arg>
+<arg>${valid_result}</arg>
+<doc>Fails if objects are unequal after converting them to strings.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.878554" elapsed="0.000000"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Valid time string test passed</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.878554" elapsed="0.000000"/>
+</kw>
+<status status="PASS" start="2025-10-29T19:07:34.869438" elapsed="0.010119"/>
+</test>
+<test id="s1-t3" name="invalid time string" line="33">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Testing invalid time string ${invalid_time}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.880554" elapsed="0.000000"/>
+</kw>
+<kw name="Write Data" owner="SerialLibrary">
+<arg>${invalid_time}</arg>
+<arg>encoding=${encoding}</arg>
+<doc>Writes data into the port.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.880554" elapsed="0.000000"/>
+</kw>
+<kw name="Read Until" owner="SerialLibrary">
+<msg time="2025-10-29T19:07:34.888553" level="INFO">${resp} = -1X</msg>
+<var>${resp}</var>
+<arg>terminator=58</arg>
+<arg>encoding=${encoding}</arg>
+<doc>Read until a termination sequence is found, size exceeded or timeout.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.880554" elapsed="0.007999"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Received: ${resp}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.888553" elapsed="0.001005"/>
+</kw>
+<kw name="Should Be Equal As Strings" owner="BuiltIn">
+<arg>${resp}</arg>
+<arg>${invalid_result}</arg>
+<doc>Fails if objects are unequal after converting them to strings.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.889558" elapsed="0.000000"/>
+</kw>
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Invalid time string test passed</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.889558" elapsed="0.000000"/>
+</kw>
+<status status="PASS" start="2025-10-29T19:07:34.879557" elapsed="0.010001"/>
+</test>
+<test id="s1-t4" name="disconnect serial" line="41">
+<kw name="Log To Console" owner="BuiltIn">
+<arg>Disconnecting ${board}</arg>
+<doc>Logs the given message to the console.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.890555" elapsed="0.000000"/>
+</kw>
+<kw name="Delete Port" owner="SerialLibrary" type="TEARDOWN">
+<arg>${com}</arg>
+<doc>Deletes specified port.</doc>
+<status status="PASS" start="2025-10-29T19:07:34.891556" elapsed="0.000000"/>
+</kw>
+<status status="PASS" start="2025-10-29T19:07:34.890555" elapsed="0.001999"/>
+</test>
+<status status="PASS" start="2025-10-29T19:07:34.794433" elapsed="0.098121"/>
+</suite>
+<statistics>
+<total>
+<stat pass="4" fail="0" skip="0">All Tests</stat>
+</total>
+<tag>
+</tag>
+<suite>
+<stat name="Teht5" id="s1" pass="4" fail="0" skip="0">Teht5</stat>
+</suite>
+</statistics>
+<errors>
+</errors>
+</robot>

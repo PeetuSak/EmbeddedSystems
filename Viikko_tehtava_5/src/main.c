@@ -1,4 +1,4 @@
-// koodi 1p  tehtävään
+
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
@@ -13,7 +13,7 @@
 //parser
 #define TIME_LEN_ERROR      -1
 #define TIME_ARRAY_ERROR    -2
-#define TIME_VALUE_ERROR    -3
+#define TIME_VALUE_ERROR    -1
 
 // time format: HHMMSS
 int time_parse(char *time) {
@@ -108,27 +108,31 @@ static void uart_task(void *unused1, void *unused2, void *unused3)
     printk("UART-taski käynnistyi!\n");
     char rc=0;
     char uart_msg[20];
-    memset(uart_msg,0,20);
+    memset(uart_msg,0,sizeof(uart_msg));
     int uart_msg_cnt = 0;
 
-    while (true) {
-        if (uart_poll_in(uart_dev,&rc) == 0) {
-            if (rc != '\r') {
-                uart_msg[uart_msg_cnt++] = rc;
-            } else {
-                struct data_t *buf = k_malloc(sizeof(struct data_t));
-                if (buf == NULL) return;
-                snprintf(buf->msg, sizeof(buf->msg), "%s", uart_msg);
-                k_fifo_put(&dispatcher_fifo, buf);
-
+     while (true) {
+         if (uart_poll_in(uart_dev,&rc) == 0) {
+            if (rc == 'X') {
+                if (uart_msg_cnt == 6) {
+                    uart_msg[uart_msg_cnt] = '\0'; 
+                    int result = time_parse(uart_msg);
+                    char outbuf[16];
+                    int len = snprintf(outbuf, sizeof(outbuf), "%dX", result);
+                    for (int i = 0; i < len; i++) {
+                        uart_poll_out(uart_dev, outbuf[i]);
+                    }
+                }
                 uart_msg_cnt = 0;
-                memset(uart_msg,0,20);
+                memset(uart_msg, 0, sizeof(uart_msg));
+            } else {
+                if (uart_msg_cnt < 6) { 
+                uart_msg[uart_msg_cnt++] = rc;} 
             }
+        k_msleep(1);
         }
-        k_msleep(10);
     }
 }
-
 static void dispatcher_task(void *unused1, void *unused2, void *unused3)
 {
     while (true) {
